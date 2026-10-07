@@ -5,58 +5,12 @@
 #include <pthread.h>
 #include <windows.h>
 
-/*
-    PROBLEMA 12 - FREQUÊNCIA DE PALAVRAS
-
-    O programa possui duas formas de processamento:
-
-    1. Sequencial:
-       Uma única execução percorre todas as palavras.
-
-    2. Paralela:
-       As palavras são divididas entre várias threads.
-       Cada thread possui sua própria tabela de frequência.
-       No final, as tabelas locais são combinadas.
-
-    Uso:
-
-       frequencia.exe arquivo.txt 1
-       frequencia.exe arquivo.txt 2
-       frequencia.exe arquivo.txt 4
-       frequencia.exe arquivo.txt 8
-       frequencia.exe arquivo.txt max
-*/
-
-
-/* =========================================================
-   ESTRUTURAS DE DADOS
-   ========================================================= */
-
-/*
-    Estrutura que representa uma palavra na tabela.
-
-    Exemplo:
-
-        "casa" -> 15
-
-    texto       = "casa"
-    quantidade  = 15
-    proxima     = próxima palavra da lista
-*/
 typedef struct Palavra {
     char *texto;
     long quantidade;
     struct Palavra *proxima;
 } Palavra;
 
-
-/*
-    Tabela hash.
-
-    Em vez de procurar uma palavra percorrendo
-    todas as palavras existentes, usamos uma função
-    hash para escolher uma posição da tabela.
-*/
 #define TAMANHO_TABELA 100003
 
 typedef struct {
@@ -64,16 +18,6 @@ typedef struct {
 } TabelaHash;
 
 
-/*
-    Estrutura utilizada pelas threads.
-
-    Cada thread recebe:
-
-    - o vetor completo de palavras;
-    - a posição inicial;
-    - a posição final;
-    - uma tabela própria para armazenar suas frequências.
-*/
 typedef struct {
     char **palavras;
 
@@ -84,28 +28,12 @@ typedef struct {
 } DadosThread;
 
 
-/*
-    Estrutura auxiliar utilizada para transformar
-    a tabela hash em um vetor.
-
-    Isso facilita a ordenação alfabética das palavras.
-*/
 typedef struct {
     char *texto;
     long quantidade;
 } ItemResultado;
 
 
-/* =========================================================
-   FUNÇÃO DE TEMPO
-   ========================================================= */
-
-/*
-    Retorna o tempo atual em segundos.
-
-    No Windows usamos QueryPerformanceCounter,
-    que fornece um contador de alta precisão.
-*/
 double tempo_atual() {
 
     static LARGE_INTEGER frequencia;
@@ -119,24 +47,6 @@ double tempo_atual() {
 }
 
 
-/* =========================================================
-   FUNÇÃO HASH
-   ========================================================= */
-
-/*
-    Converte uma palavra em uma posição da tabela hash.
-
-    Exemplo conceitual:
-
-        "casa" -> posição 54821
-        "carro" -> posição 81234
-
-    Palavras diferentes podem eventualmente cair
-    na mesma posição. Isso é chamado de colisão.
-
-    A lista encadeada dentro de cada posição resolve
-    essas colisões.
-*/
 unsigned long hash_string(const char *str) {
 
     unsigned long hash = 5381;
@@ -150,15 +60,6 @@ unsigned long hash_string(const char *str) {
 }
 
 
-/* =========================================================
-   TABELA HASH
-   ========================================================= */
-
-/*
-    Inicializa a tabela.
-
-    Todas as posições começam como NULL.
-*/
 void criar_tabela(TabelaHash *tabela) {
 
     for (int i = 0; i < TAMANHO_TABELA; i++) {
@@ -167,13 +68,6 @@ void criar_tabela(TabelaHash *tabela) {
 }
 
 
-/*
-    Procura uma palavra dentro da tabela.
-
-    Se encontrar, retorna o endereço do elemento.
-
-    Se não encontrar, retorna NULL.
-*/
 Palavra *buscar_palavra(TabelaHash *tabela,
                         const char *texto) {
 
@@ -194,15 +88,6 @@ Palavra *buscar_palavra(TabelaHash *tabela,
 }
 
 
-/*
-    Adiciona uma ocorrência da palavra.
-
-    Se a palavra já existir:
-        quantidade++
-
-    Se ainda não existir:
-        cria uma nova entrada.
-*/
 void adicionar_palavra(TabelaHash *tabela,
                        const char *texto) {
 
@@ -210,9 +95,6 @@ void adicionar_palavra(TabelaHash *tabela,
 
     Palavra *atual = tabela->baldes[indice];
 
-    /*
-        Verifica se a palavra já existe.
-    */
     while (atual != NULL) {
 
         if (strcmp(atual->texto, texto) == 0) {
@@ -225,10 +107,6 @@ void adicionar_palavra(TabelaHash *tabela,
         atual = atual->proxima;
     }
 
-    /*
-        Se chegou aqui, a palavra ainda não existe.
-        Então criamos uma nova entrada.
-    */
     Palavra *nova = malloc(sizeof(Palavra));
 
     if (nova == NULL) {
@@ -247,21 +125,12 @@ void adicionar_palavra(TabelaHash *tabela,
 
     nova->quantidade = 1;
 
-    /*
-        Insere no início da lista.
-    */
     nova->proxima = tabela->baldes[indice];
 
     tabela->baldes[indice] = nova;
 }
 
 
-/*
-    Adiciona várias ocorrências de uma vez.
-
-    Essa função é usada durante a combinação das
-    tabelas das threads.
-*/
 void adicionar_quantidade(TabelaHash *tabela,
                           const char *texto,
                           long quantidade) {
@@ -301,9 +170,6 @@ void adicionar_quantidade(TabelaHash *tabela,
 }
 
 
-/*
-    Libera toda a memória utilizada pela tabela.
-*/
 void liberar_tabela(TabelaHash *tabela) {
 
     for (int i = 0; i < TAMANHO_TABELA; i++) {
@@ -325,21 +191,6 @@ void liberar_tabela(TabelaHash *tabela) {
 }
 
 
-/* =========================================================
-   LEITURA DO ARQUIVO
-   ========================================================= */
-
-/*
-    Lê todas as palavras do arquivo e coloca em um vetor.
-
-    O formato da atividade possui:
-
-        primeira linha:
-        quantidade aproximada de palavras
-
-        depois:
-        palavras separadas por espaços/quebras de linha.
-*/
 char **ler_arquivo(const char *nome_arquivo,
                    long *quantidade_palavras) {
 
@@ -353,11 +204,6 @@ char **ler_arquivo(const char *nome_arquivo,
         return NULL;
     }
 
-    /*
-        Ignora a primeira linha.
-
-        Ela informa a quantidade aproximada de palavras.
-    */
     char linha[1024];
 
     if (fgets(linha, sizeof(linha), arquivo) == NULL) {
@@ -367,9 +213,6 @@ char **ler_arquivo(const char *nome_arquivo,
         return NULL;
     }
 
-    /*
-        Começamos com espaço para 1000 palavras.
-    */
     long capacidade = 1000;
 
     char **palavras = malloc(
@@ -387,15 +230,8 @@ char **ler_arquivo(const char *nome_arquivo,
 
     char buffer[1024];
 
-    /*
-        Lê cada token do arquivo.
-    */
     while (fscanf(arquivo, "%1023s", buffer) == 1) {
 
-        /*
-            Se o vetor estiver cheio,
-            dobramos sua capacidade.
-        */
         if (quantidade >= capacidade) {
 
             capacidade *= 2;
@@ -422,9 +258,6 @@ char **ler_arquivo(const char *nome_arquivo,
             palavras = temporario;
         }
 
-        /*
-            Aloca espaço para a palavra.
-        */
         palavras[quantidade] =
             malloc(strlen(buffer) + 1);
 
@@ -455,9 +288,6 @@ char **ler_arquivo(const char *nome_arquivo,
 }
 
 
-/*
-    Libera o vetor de palavras.
-*/
 void liberar_palavras(char **palavras,
                       long quantidade) {
 
@@ -469,16 +299,6 @@ void liberar_palavras(char **palavras,
 }
 
 
-/* =========================================================
-   PROCESSAMENTO SEQUENCIAL
-   ========================================================= */
-
-/*
-    Processa todas as palavras usando apenas
-    uma execução.
-
-    É a versão de referência do programa.
-*/
 void processar_sequencial(char **palavras,
                           long quantidade,
                           TabelaHash *tabela) {
@@ -493,25 +313,6 @@ void processar_sequencial(char **palavras,
 }
 
 
-/* =========================================================
-   PROCESSAMENTO DA THREAD
-   ========================================================= */
-
-/*
-    Cada thread executa esta função.
-
-    Ela recebe uma parte do vetor.
-
-    Exemplo:
-
-        100 palavras
-        4 threads
-
-        Thread 0 -> 0 até 24
-        Thread 1 -> 25 até 49
-        Thread 2 -> 50 até 74
-        Thread 3 -> 75 até 99
-*/
 void *processar_parte(void *argumento) {
 
     DadosThread *dados =
@@ -533,29 +334,6 @@ void *processar_parte(void *argumento) {
 }
 
 
-/* =========================================================
-   COMBINAÇÃO DAS TABELAS
-   ========================================================= */
-
-/*
-    Depois que todas as threads terminam,
-    suas tabelas locais precisam ser combinadas.
-
-    Exemplo:
-
-        Thread 1:
-        casa = 5
-
-        Thread 2:
-        casa = 3
-
-        Thread 3:
-        casa = 7
-
-        Resultado:
-
-        casa = 15
-*/
 void combinar_tabela(TabelaHash *destino,
                      TabelaHash *origem) {
 
@@ -578,13 +356,6 @@ void combinar_tabela(TabelaHash *destino,
 }
 
 
-/* =========================================================
-   RESULTADOS
-   ========================================================= */
-
-/*
-    Conta quantas palavras diferentes existem.
-*/
 long contar_distintas(TabelaHash *tabela) {
 
     long total = 0;
@@ -606,9 +377,6 @@ long contar_distintas(TabelaHash *tabela) {
 }
 
 
-/*
-    Copia a tabela para um vetor.
-*/
 ItemResultado *criar_lista_resultados(
     TabelaHash *tabela,
     long quantidade_distintas) {
@@ -651,10 +419,6 @@ ItemResultado *criar_lista_resultados(
 }
 
 
-/*
-    Função utilizada pelo qsort para ordenar
-    as palavras alfabeticamente.
-*/
 int comparar_resultados(
     const void *a,
     const void *b) {
@@ -669,9 +433,6 @@ int comparar_resultados(
 }
 
 
-/*
-    Mostra o resultado final.
-*/
 void imprimir_resultados(TabelaHash *tabela) {
 
     long quantidade_distintas =
@@ -716,14 +477,6 @@ void imprimir_resultados(TabelaHash *tabela) {
 }
 
 
-/* =========================================================
-   NUMERO DE PROCESSADORES
-   ========================================================= */
-
-/*
-    Descobre quantos processadores lógicos
-    estão disponíveis no Windows.
-*/
 int obter_max_threads() {
 
     DWORD quantidade =
@@ -739,27 +492,17 @@ int obter_max_threads() {
 }
 
 
-/* =========================================================
-   PROCESSAMENTO PARALELO
-   ========================================================= */
-
 void processar_paralelo(char **palavras,
                         long quantidade,
                         int numero_threads,
                         TabelaHash *resultado) {
 
-    /*
-        Vetor de threads.
-    */
     pthread_t *threads =
         malloc(
             numero_threads *
             sizeof(pthread_t)
         );
 
-    /*
-        Informações de cada thread.
-    */
     DadosThread *dados =
         malloc(
             numero_threads *
@@ -777,28 +520,15 @@ void processar_paralelo(char **palavras,
     }
 
 
-    /*
-        Calculamos quantas palavras cada thread
-        deve receber.
-    */
     long base =
         quantidade / numero_threads;
 
-    /*
-        Caso a divisão não seja exata,
-        algumas threads receberão uma palavra
-        adicional.
-    */
     long resto =
         quantidade % numero_threads;
-
 
     long inicio = 0;
 
 
-    /*
-        Criamos as threads.
-    */
     for (int i = 0;
          i < numero_threads;
          i++) {
@@ -817,9 +547,6 @@ void processar_paralelo(char **palavras,
         dados[i].fim =
             inicio + tamanho;
 
-        /*
-            Cada thread possui sua própria tabela.
-        */
         criar_tabela(
             &dados[i].tabela_local
         );
@@ -850,9 +577,6 @@ void processar_paralelo(char **palavras,
     }
 
 
-    /*
-        Esperamos todas as threads terminarem.
-    */
     for (int i = 0;
          i < numero_threads;
          i++) {
@@ -864,15 +588,9 @@ void processar_paralelo(char **palavras,
     }
 
 
-    /*
-        Criamos a tabela final.
-    */
     criar_tabela(resultado);
 
 
-    /*
-        Combinamos as tabelas locais.
-    */
     for (int i = 0;
          i < numero_threads;
          i++) {
@@ -893,20 +611,8 @@ void processar_paralelo(char **palavras,
 }
 
 
-/* =========================================================
-   FUNÇÃO PRINCIPAL
-   ========================================================= */
-
 int main(int argc, char *argv[]) {
 
-    /*
-        Verifica se o usuário passou
-        os argumentos necessários.
-
-        Exemplo:
-
-        frequencia.exe arquivo.txt 4
-    */
     if (argc != 3) {
 
         printf("\nUso:\n");
@@ -941,32 +647,17 @@ int main(int argc, char *argv[]) {
     }
 
 
-    /*
-        Nome do arquivo.
-    */
     const char *nome_arquivo =
         argv[1];
 
 
-    /*
-        Descobrimos o número máximo
-        de processadores lógicos.
-    */
     int max_threads =
         obter_max_threads();
 
 
-    /*
-        Converte o segundo argumento
-        para número de threads.
-    */
     int numero_threads;
 
 
-    /*
-        Se o usuário escreveu "max",
-        usamos o máximo de CPUs lógicas.
-    */
     if (strcmp(argv[2], "max") == 0) {
 
         numero_threads =
@@ -979,9 +670,6 @@ int main(int argc, char *argv[]) {
     }
 
 
-    /*
-        Verificação básica.
-    */
     if (numero_threads < 1) {
 
         printf(
@@ -990,17 +678,6 @@ int main(int argc, char *argv[]) {
 
         return 1;
     }
-
-
-    /*
-        Se o usuário pediu mais threads
-        que o número de CPUs lógicas,
-        permitimos mesmo assim.
-
-        Isso pode ser útil para testes,
-        embora a configuração "max"
-        use exatamente o número detectado.
-    */
 
 
     printf("\n====================================\n");
@@ -1027,20 +704,6 @@ int main(int argc, char *argv[]) {
     );
 
 
-    /*
-        -----------------------------------------------------
-        CARREGAMENTO DO ARQUIVO
-        -----------------------------------------------------
-
-        Importante:
-
-        A leitura acontece antes da medição.
-
-        Assim, tanto o sequencial quanto o paralelo
-        trabalham com exatamente o mesmo vetor
-        de palavras.
-    */
-
     long quantidade_palavras;
 
     char **palavras =
@@ -1061,26 +724,10 @@ int main(int argc, char *argv[]) {
     );
 
 
-    /*
-        Tabela que armazenará o resultado.
-    */
-    TabelaHash resultado;
-
-
-    /*
-        -----------------------------------------------------
-        INICIO DA MEDICAO
-        -----------------------------------------------------
-    */
-
     double inicio =
         tempo_atual();
 
 
-    /*
-        Se foi escolhida apenas 1 thread,
-        executamos a versão sequencial.
-    */
     if (numero_threads == 1) {
 
         criar_tabela(&resultado);
@@ -1093,10 +740,6 @@ int main(int argc, char *argv[]) {
 
     } else {
 
-        /*
-            Caso contrário,
-            executamos a versão paralela.
-        */
         processar_paralelo(
             palavras,
             quantidade_palavras,
@@ -1106,12 +749,6 @@ int main(int argc, char *argv[]) {
     }
 
 
-    /*
-        -----------------------------------------------------
-        FINAL DA MEDICAO
-        -----------------------------------------------------
-    */
-
     double fim =
         tempo_atual();
 
@@ -1120,9 +757,6 @@ int main(int argc, char *argv[]) {
         fim - inicio;
 
 
-    /*
-        Mostramos o resultado.
-    */
     imprimir_resultados(
         &resultado
     );
@@ -1134,9 +768,6 @@ int main(int argc, char *argv[]) {
     );
 
 
-    /*
-        Libera memória.
-    */
     liberar_tabela(
         &resultado
     );
